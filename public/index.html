@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QPI 統合ガントチャート（共有Webアプリ）</title>
+<style>
+:root {
+  --navy: #1f3864;
+  --mid: #8faadc;
+  --late: #e65050;
+  --soon: #ffa500;
+  --prog: #4472c4;
+  --before: #9bc2e6;
+  --cont: #a9d08e;
+  --nodate: #bfbfbf;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Meiryo UI", sans-serif; font-size: 12px; color: #222; background: #f4f6fa; }
+header { background: var(--navy); color: #fff; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+header h1 { font-size: 17px; margin: 0 12px 0 0; display: flex; align-items: center; gap: 8px; }
+.sync-badge { font-size: 10px; background: #28a745; padding: 2px 6px; border-radius: 10px; font-weight: normal; }
+header label { display: flex; gap: 4px; align-items: center; font-size: 12px; }
+input, select, button { font: inherit; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; }
+button { cursor: pointer; background: #fff; border: none; font-weight: 500; }
+button:hover { opacity: 0.9; }
+.tabs { display: flex; gap: 2px; padding: 8px 16px 0; }
+.tab { padding: 8px 18px; background: #dde3f0; cursor: pointer; border-radius: 6px 6px 0 0; font-weight: 500; }
+.tab.on { background: #fff; font-weight: bold; color: var(--navy); }
+.panel { display: none; background: #fff; margin: 0 16px 16px; padding: 14px; border-radius: 0 6px 6px 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.panel.on { display: block; }
+.kpis { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.kpi { min-width: 84px; padding: 6px 12px; border-radius: 6px; color: #fff; text-align: center; cursor: pointer; opacity: .95; transition: transform 0.1s; }
+.kpi:hover { transform: translateY(-1px); }
+.kpi b { display: block; font-size: 20px; }
+.kpi.off { opacity: .25; }
+.gwrap { overflow: auto; max-height: 72vh; border: 1px solid #ccd; border-radius: 4px; }
+table.g { border-collapse: separate; border-spacing: 0; width: 100%; }
+.g th, .g td { border-bottom: 1px solid #e3e6ee; padding: 0 6px; height: 24px; white-space: nowrap; }
+.g thead th { position: sticky; top: 0; background: #dde3f0; z-index: 3; height: 36px; }
+.g thead th.chart { padding: 0; z-index: 2; }
+.g td.sticky, .g th.sticky { position: sticky; background: inherit; z-index: 2; }
+.g tr.l1 td { background: var(--navy); color: #fff; font-weight: bold; }
+.g tr.l2 td { background: #e4e9f5; font-weight: bold; }
+.g tr.l3 td { background: #fff; }
+.g tr.l3:hover td { background: #f0f4fc; }
+.g td.name { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+.tg { cursor: pointer; display: inline-block; width: 16px; text-align: center; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: bold; }
+.st-遅延 { background: var(--late); }
+.st-期限間近 { background: var(--soon); }
+.st-進行中 { background: var(--prog); }
+.st-開始前 { background: var(--before); color: #123; }
+.st-継続中 { background: var(--cont); color: #123; }
+.st-日付未設定 { background: var(--nodate); color: #333; }
+.st-完了 { background: #999; }
+.cc { position: relative; height: 24px; padding: 0; }
+.bar { position: absolute; top: 6px; height: 12px; border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+.bar.cont { background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.12) 0 4px, transparent 4px 8px); }
+.today { position: absolute; top: 0; bottom: 0; width: 2px; background: #e00; z-index: 1; pointer-events: none; }
+.wk { position: absolute; top: 0; bottom: 0; border-left: 1px solid rgba(0,0,0,0.06); }
+.mh { position: absolute; top: 3px; font-weight: bold; font-size: 11px; border-left: 1px solid #889; padding-left: 4px; height: 30px; }
+.who { font-weight: bold; }
+.who-小出 { color: #7030a0; }
+.who-畠山 { color: #1f7777; }
+.who-鶴巻 { color: #8b5a2b; }
+.who-大村 { color: #c2185b; }
+.who-全体 { color: #555; }
+dialog { border: 0; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); padding: 20px; width: 460px; max-width: 90vw; }
+dialog::backdrop { background: rgba(0,0,0,0.5); }
+dialog label { display: block; margin: 8px 0; font-size: 12px; color: #445; font-weight: 500; }
+dialog input, dialog select { display: block; width: 100%; margin-top: 3px; padding: 6px; font-size: 13px; }
+.btns { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+.btns button { padding: 6px 14px; border-radius: 4px; }
+table.s { border-collapse: collapse; width: 100%; margin-top: 8px; }
+table.s td, table.s th { border: 1px solid #d5d9e5; padding: 6px 10px; }
+table.s th { background: #dde3f0; text-align: left; }
+.note h3 { margin: 18px 0 6px; color: var(--navy); border-bottom: 2px solid #dde3f0; padding-bottom: 4px; }
+.note ul { padding-left: 20px; }
+.note li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>QPI ガントチャート <span class="sync-badge" id="syncStatus">オンライン同期</span></h1>
+  <label>基準日 <input type="date" id="base"></label>
+  <label>期限間近 <input type="number" id="soon" value="7" min="1" style="width:48px">日</label>
+  <label>担当 <select id="who"><option value="">すべて</option></select></label>
+  <label>検索 <input id="q" placeholder="項目名" style="width:130px"></label>
+  <button id="exp">全展開</button><button id="col">中項目まで</button>
+  <span style="border-left: 1px solid rgba(255,255,255,0.3); height: 20px;"></span>
+  <button id="addt" style="background:#ffd966; font-weight: bold;">＋ タスク追加</button>
+  <button id="addm">＋ 中項目</button>
+  <button id="rst" style="background: #f8d7da; color: #721c24;">初期化</button>
+</header>
+
+<div class="tabs">
+  <div class="tab on" data-p="p1">ガントチャート</div>
+  <div class="tab" data-p="p2">継続・日付なし</div>
+  <div class="tab" data-p="p3">完了済み</div>
+  <div class="tab" data-p="p4">分析サマリー</div>
+</div>
+
+<div class="panel on" id="p1">
+  <div class="kpis" id="kpis"></div>
+  <div class="gwrap"><table class="g" id="gt"></table></div>
+</div>
+<div class="panel" id="p2"></div>
+<div class="panel" id="p3"></div>
+<div class="panel" id="p4"></div>
+
+<dialog id="dlg">
+  <form id="frm" method="dialog">
+    <h3 id="dtitle" style="margin: 0 0 10px;">タスク編集</h3>
+    <label>項目名 <input id="f_name" required></label>
+    <label>所属（大 ＞ 中） <select id="f_grp"></select></label>
+    <label>担当 <input id="f_who" list="whol"></label><datalist id="whol"></datalist>
+    <label>分類 <input id="f_cat"></label>
+    <label>種別／フェーズ <input id="f_kind"></label>
+    <label>ステータス
+      <select id="f_st">
+        <option value="">（未設定）</option>
+        <option>継続</option>
+        <option>終了予定</option>
+        <option>終了</option>
+      </select>
+    </label>
+    <div style="display:flex; gap:8px;">
+      <label style="flex:1;">開始日 <input type="date" id="f_s"></label>
+      <label style="flex:1;">期限 <input type="date" id="f_e"></label>
+    </div>
+    <div class="btns">
+      <button type="submit" id="f_ok" style="background:var(--navy); color:#fff;">保存（全員に反映）</button>
+      <button type="button" id="f_done">完了にする</button>
+      <button type="button" id="f_del" style="color:#c00;">削除</button>
+      <button type="button" id="f_cancel">キャンセル</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+let DATA = [];
+const CH_START = new Date(2026, 8, 1), CH_END = new Date(2027, 10, 1), DAYPX = 4;
+const DAY = 86400000;
+const pd = s => s ? new Date(s + 'T00:00:00') : null;
+const fmt = d => d ? d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() : '';
+const ST = ['遅延', '期限間近', '進行中', '開始前', '継続中', '日付未設定'];
+const COL = { 遅延: '--late', 期限間近: '--soon', 進行中: '--prog', 開始前: '--before', 継続中: '--cont', 日付未設定: '--nodate' };
+
+let tree = [], done = [], undated = [];
+
+function build() {
+  tree = []; done = []; undated = [];
+  let big = null, mid = null;
+  DATA.forEach((r, id) => {
+    if (r.lv === '済') return;
+    if (r.lv === '大') {
+      big = { lv: 1, name: r.name, kids: [], id };
+      tree.push(big);
+      mid = null;
+    } else if (r.lv === '中' && big) {
+      mid = { lv: 2, name: r.name, kids: [], id, big: big.name };
+      big.kids.push(mid);
+    } else if (r.lv === '小' && mid) {
+      const it = { ...r, lv: 3, id, s: pd(r.s), e: pd(r.e), big: big.name, mid: mid.name };
+      if (it.st === '終了') done.push(it);
+      else if (!it.s && !it.e) undated.push(it);
+      else mid.kids.push(it);
+    }
+  });
+}
+
+const baseEl = document.getElementById('base'), soonEl = document.getElementById('soon');
+const t0 = new Date();
+baseEl.value = t0.getFullYear() + '-' + String(t0.getMonth() + 1).padStart(2, '0') + '-' + String(t0.getDate()).padStart(2, '0');
+const state = { off: new Set(), collapsed: new Set() };
+
+function status(it, base, soon) {
+  if (!it.s && !it.e) return it.st === '継続' ? '継続中' : '日付未設定';
+  if (it.s && it.s > base) return '開始前';
+  if (!it.e) return it.st === '継続' ? '継続中' : '日付未設定';
+  if (it.e < base) return '遅延';
+  if ((it.e - base) / DAY <= soon) return '期限間近';
+  return '進行中';
+}
+
+function range(n) {
+  let s = null, e = null, open = false;
+  for (const k of n.kids) {
+    const r = k.lv === 3 ? { s: k.s || k.e, e: k.e || k.s, open: !k.e && k.st === '継続' } : range(k);
+    if (r.s && (!s || r.s < s)) s = r.s;
+    if (r.e && (!e || r.e > e)) e = r.e;
+    if (r.open) open = true;
+  }
+  n.s = s; n.e = e; n.open = open;
+  return { s, e, open };
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+function xpos(d) {
+  return Math.round((d - CH_START) / DAY * DAYPX);
+}
+
+const W = xpos(CH_END);
+
+function header() {
+  let h = '<tr><th class="sticky" style="left:0;min-width:380px">項目（大 ＞ 中 ＞ 小）</th><th>担当</th><th>種別</th><th>状態</th><th>開始</th><th>期限</th><th>残</th><th class="chart" style="min-width:' + W + 'px"><div style="position:relative;height:36px;width:' + W + 'px">';
+  for (let d = new Date(CH_START); d < CH_END; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    h += '<div class="mh" style="left:' + xpos(d) + 'px">' + d.getFullYear() + '/' + (d.getMonth() + 1) + '</div>';
+  }
+  return h + '</div></th></tr>';
+}
+
+function weekLines() {
+  let s = '';
+  for (let d = new Date(CH_START); d < CH_END; d = new Date(d.getTime() + 7 * DAY)) {
+    if (d.getDay() === 1) s += '<div class="wk" style="left:' + xpos(d) + 'px"></div>';
+  }
+  return s;
+}
+let WK = weekLines();
+
+function barHtml(s, e, open, color, cls) {
+  if (!s) return '';
+  if (!e) e = s;
+  const endD = open ? CH_END : new Date(e.getTime() + DAY);
+  const l = Math.max(0, xpos(s)), r = Math.min(W, xpos(endD));
+  if (r <= 0 || l >= W) return '';
+  return '<div class="bar ' + (cls || '') + '" style="left:' + l + 'px;width:' + Math.max(4, r - l) + 'px;background-color:var(' + color + ')"></div>';
+}
+
+function render() {
+  const base = pd(baseEl.value), soon = +soonEl.value || 7;
+  const who = document.getElementById('who').value, q = document.getElementById('q').value.trim();
+  const counts = {};
+  ST.forEach(s => counts[s] = 0);
+  let html = '<thead>' + header() + '</thead><tbody>';
+  const todayX = xpos(base);
+  const cellChart = inner => '<td class="cc" style="min-width:' + W + 'px">' + WK + (todayX >= 0 && todayX < W ? '<div class="today" style="left:' + todayX + 'px"></div>' : '') + inner + '</td>';
+
+  for (const b of tree) {
+    let bigHtml = '', bigVisible = false;
+    for (const m of b.kids) {
+      const items = [];
+      for (const it of m.kids) {
+        it.stat = status(it, base, soon);
+        counts[it.stat]++;
+        if (state.off.has(it.stat)) continue;
+        if (who && it.who !== who) continue;
+        if (q && !it.name.includes(q)) continue;
+        items.push(it);
+      }
+      range(m);
+      const filtered = !!(who || q || state.off.size);
+      if (!items.length && (filtered || m.kids.length)) continue;
+      bigVisible = true;
+      const key = b.name + '/' + m.name, col = state.collapsed.has(key);
+      bigHtml += '<tr class="l2" data-g="' + m.id + '"><td class="sticky" style="left:0" title="ダブルクリックで名称変更"><span class="tg" data-k="' + esc(key) + '">' + (col ? '▶' : '▼') + '</span>' + esc(m.name) + ' <span style="font-weight:normal;color:#667">(' + items.length + '件)</span></td><td></td><td></td><td></td><td>' + fmt(m.s) + '</td><td>' + (m.open ? '継続' : fmt(m.e)) + '</td><td></td>' + cellChart(barHtml(m.s, m.e, false, '--mid')) + '</tr>';
+      if (!col) {
+        for (const it of items) {
+          const rem = it.e ? Math.round((it.e - base) / DAY) : '';
+          bigHtml += '<tr class="l3" data-id="' + it.id + '"><td class="sticky name" style="left:0;padding-left:34px" title="' + esc(it.name) + '">' + esc(it.name) + '</td><td class="who who-' + esc(it.who) + '">' + esc(it.who) + '</td><td>' + esc(it.kind || it.cat || '') + '</td><td><span class="badge st-' + it.stat + '">' + it.stat + '</span></td><td>' + fmt(it.s) + '</td><td>' + fmt(it.e) + '</td><td>' + rem + '</td>' + cellChart(barHtml(it.s, it.e, it.stat === '継続中' && !it.e, COL[it.stat], it.stat === '継続中' ? 'cont' : '')) + '</tr>';
+        }
+      }
+    }
+    if (bigVisible) {
+      range(b);
+      html += '<tr class="l1" data-g="' + b.id + '"><td class="sticky" style="left:0;background:var(--navy)"><span class="tg" data-k="' + esc(b.name) + '">' + (state.collapsed.has(b.name) ? '▶' : '▼') + '</span>' + esc(b.name) + '</td><td></td><td></td><td></td><td>' + fmt(b.s) + '</td><td>' + fmt(b.e) + '</td><td></td>' + cellChart(barHtml(b.s, b.e, false, '--navy')) + '</tr>';
+      if (!state.collapsed.has(b.name)) html += bigHtml;
+    }
+  }
+  document.getElementById('gt').innerHTML = html + '</tbody>';
+  document.getElementById('kpis').innerHTML = ST.map(s => '<div class="kpi' + (state.off.has(s) ? ' off' : '') + '" data-s="' + s + '" style="background:var(' + COL[s] + ');' + (s === '開始前' || s === '継続中' ? 'color:#123;' : '') + '"><b>' + counts[s] + '</b>' + s + '</div>').join('') + '<div class="kpi" style="background:#999;cursor:default"><b>' + done.length + '</b>完了</div>';
+  renderOthers(base, soon, counts);
+}
+
+function renderOthers(base, soon, counts) {
+  const tbl = (head, rows, ids) => '<table class="s"><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr>' + rows.map((r, k) => '<tr' + (ids ? ' data-id="' + ids[k] + '" style="cursor:pointer"' : '') + '>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</table>';
+  document.getElementById('p2').innerHTML = '<p>期限のない継続業務・日付未入力のタスクです。行をクリックで編集できます。</p>' + tbl(['担当', '項目', '分類', '種別', 'ステータス', '備考'], undated.map(i => [i.who, i.name, i.cat, i.kind, i.st, i.st === '終了予定' ? '期限を入力してください' : '']), undated.map(i => i.id));
+  document.getElementById('p3').innerHTML = tbl(['担当', '項目', '分類', '種別', '開始', '終了'], done.map(i => [i.who, i.name, i.cat, i.kind, fmt(i.s), fmt(i.e)]), done.map(i => i.id));
+
+  const late = [], soonL = [];
+  for (const b of tree) for (const m of b.kids) for (const it of m.kids) {
+    if (it.stat === '遅延') late.push(it);
+    if (it.stat === '期限間近') soonL.push(it);
+  }
+  const dup = {};
+  for (const i of [...undated, ...done, ...tree.flatMap(b => b.kids.flatMap(m => m.kids))]) {
+    dup[i.name.trim()] = (dup[i.name.trim()] || 0) + 1;
+  }
+  const dups = Object.entries(dup).filter(([k, v]) => v > 1);
+  const cont = tree.flatMap(b => b.kids.flatMap(m => m.kids)).filter(i => i.st === '継続' && i.e);
+  const lst = a => '<ul>' + a.map(i => '<li>' + esc(i.who) + '：' + esc(i.name) + '（' + fmt(i.e) + '）</li>').join('') + '</ul>';
+  const proj = tree[0];
+  const pi = proj ? proj.kids.flatMap(m => m.kids) : [];
+
+  document.getElementById('p4').innerHTML = '<div class="note"><h3>全体像</h3><ul><li>タスク総数：' + (DATA.filter(r => r.lv === '小').length) + '件 ／ 完了 ' + done.length + '件 ／ 期限なし継続 ' + undated.length + '件</li><li>プロジェクト：' + pi.length + '件。フェーズ1（仕組み構築 2026/11〜2027/6）→フェーズ2（運用検証 2027/7〜9）。サプライヤー開拓(⑤)は2027/1末までの短期集中（Phase1〜5）。</li><li>2026/11に①在庫管理・②生産管理・③レイアウトが同時に始動。</li></ul>'
+    + '<h3>基準日 ' + fmt(base) + ' の状況</h3>' + tbl(['区分', '件数'], ST.map(s => [s, counts[s]]))
+    + '<h3>遅延（' + late.length + '件）</h3>' + (late.length ? lst(late) : '<p>なし</p>')
+    + '<h3>期限間近（' + soonL.length + '件）</h3>' + (soonL.length ? lst(soonL) : '<p>なし</p>')
+    + '<h3>要確認ポイント</h3><ul>' + (dups.length ? '<li>同名の重複行：' + dups.map(([k, v]) => esc(k) + '（' + v + '件）').join('、') + ' → 統合を推奨</li>' : '')
+    + (cont.length ? '<li>「継続」なのに期限がある行：' + cont.length + '件（' + cont.map(i => esc(i.name)).join('、') + '）</li>' : '')
+    + '<li>「終了予定」で日付なし：' + undated.filter(i => i.st === '終了予定').map(i => esc(i.name)).join('、') + '</li></ul></div>';
+}
+
+// サーバー同期通信
+async function loadFromServer() {
+  try {
+    const res = await fetch('/api/tasks');
+    const json = await res.json();
+    DATA = json.tasks;
+    build();
+    refreshWho();
+    render();
+    document.getElementById('syncStatus').textContent = '同期完了 (' + new Date().toLocaleTimeString() + ')';
+    document.getElementById('syncStatus').style.background = '#28a745';
+  } catch (err) {
+    console.error('Fetch error:', err);
+    document.getElementById('syncStatus').textContent = 'オフライン / 接続エラー';
+    document.getElementById('syncStatus').style.background = '#dc3545';
+  }
+}
+
+async function saveToServer() {
+  try {
+    document.getElementById('syncStatus').textContent = '保存中...';
+    document.getElementById('syncStatus').style.background = '#fd7e14';
+    const res = await fetch('/api/tasks', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: DATA })
+    });
+    if (!res.ok) throw new Error('Save failed');
+    build();
+    refreshWho();
+    render();
+    document.getElementById('syncStatus').textContent = '同期完了 (' + new Date().toLocaleTimeString() + ')';
+    document.getElementById('syncStatus').style.background = '#28a745';
+  } catch (err) {
+    alert('サーバーへの保存に失敗しました。');
+    document.getElementById('syncStatus').textContent = '保存エラー';
+    document.getElementById('syncStatus').style.background = '#dc3545';
+  }
+}
+
+// UIイベント
+const $ = id => document.getElementById(id);
+const dlg = $('dlg');
+let editId = null;
+
+function refreshWho() {
+  const cur = $('who').value;
+  const ws = [...new Set(DATA.filter(r => r.lv === '小' && r.who).map(r => r.who))];
+  $('who').innerHTML = '<option value="">すべて</option>' + ws.map(w => '<option>' + esc(w) + '</option>').join('');
+  $('who').value = ws.includes(cur) ? cur : '';
+  $('whol').innerHTML = ws.map(w => '<option value="' + esc(w) + '">').join('');
+}
+
+function groupOptions(sel) {
+  let h = '';
+  for (const b of tree) for (const m of b.kids) {
+    const k = b.name + '||' + m.name;
+    h += '<option value="' + esc(k) + '"' + (k === sel ? ' selected' : '') + '>' + esc(b.name + ' ＞ ' + m.name) + '</option>';
+  }
+  $('f_grp').innerHTML = h;
+}
+
+function openEdit(id) {
+  editId = id;
+  const it = id === null ? null : DATA[id];
+  const item = id === null ? null : [...done, ...undated, ...tree.flatMap(b => b.kids.flatMap(m => m.kids))].find(x => x.id === id);
+  $('dtitle').textContent = id === null ? 'タスク追加' : 'タスク編集';
+  groupOptions(item ? item.big + '||' + item.mid : null);
+  $('f_name').value = it ? it.name : '';
+  $('f_who').value = it ? it.who : '';
+  $('f_cat').value = it ? it.cat : '';
+  $('f_kind').value = it ? it.kind : '';
+  $('f_st').value = it ? it.st : '';
+  $('f_s').value = it ? it.s : '';
+  $('f_e').value = it ? it.e : '';
+  $('f_del').style.display = id === null ? 'none' : '';
+  $('f_done').style.display = id === null ? 'none' : '';
+  dlg.showModal();
+}
+
+function groupEnd(key) {
+  const [bn, mn] = key.split('||');
+  let b = null, start = -1;
+  for (let i = 0; i < DATA.length; i++) {
+    const r = DATA[i];
+    if (r.lv === '大') { if (start >= 0) return i; b = r.name; }
+    else if (r.lv === '中') { if (start >= 0) return i; if (b === bn && r.name === mn) start = i; }
+  }
+  return DATA.length;
+}
+
+function saveItem() {
+  const obj = {
+    lv: '小',
+    name: $('f_name').value.trim(),
+    who: $('f_who').value.trim(),
+    cat: $('f_cat').value.trim(),
+    kind: $('f_kind').value.trim(),
+    st: $('f_st').value,
+    s: $('f_s').value,
+    e: $('f_e').value
+  };
+  if (!obj.name) return;
+  if (obj.s && obj.e && obj.e < obj.s) {
+    alert('期限が開始日より前です');
+    return false;
+  }
+  const key = $('f_grp').value;
+  if (editId !== null) {
+    const old = [...done, ...undated, ...tree.flatMap(b => b.kids.flatMap(m => m.kids))].find(x => x.id === editId);
+    if (old.big + '||' + old.mid === key) {
+      DATA[editId] = obj;
+    } else {
+      DATA.splice(editId, 1);
+      DATA.splice(groupEnd(key), 0, obj);
+    }
+  } else {
+    DATA.splice(groupEnd(key), 0, obj);
+  }
+  saveToServer();
+  return true;
+}
+
+$('frm').addEventListener('submit', e => { if (saveItem() === false) e.preventDefault(); });
+$('f_cancel').onclick = () => dlg.close();
+$('f_del').onclick = () => {
+  if (confirm('このタスクを削除しますか？全員の画面から削除されます。')) {
+    DATA.splice(editId, 1);
+    dlg.close();
+    saveToServer();
+  }
+};
+$('f_done').onclick = () => {
+  DATA[editId].st = '終了';
+  dlg.close();
+  saveToServer();
+};
+
+$('addt').onclick = () => openEdit(null);
+$('addm').onclick = () => {
+  const n = prompt('追加する中項目の名前');
+  if (!n) return;
+  const bn = prompt('所属する大項目名（' + tree.map(b => b.name).join(' / ') + '）', tree[0].name);
+  const b = tree.find(x => x.name === bn);
+  if (!b) { alert('大項目が見つかりません'); return; }
+  let idx = DATA.length;
+  const bi = DATA.findIndex(r => r.lv === '大' && r.name === bn);
+  for (let i = bi + 1; i < DATA.length; i++) {
+    if (DATA[i].lv === '大') { idx = i; break; }
+  }
+  DATA.splice(idx, 0, { lv: '中', name: n.trim() });
+  saveToServer();
+};
+
+document.addEventListener('click', e => {
+  if (e.target.closest('.tg') || e.target.closest('.kpi') || e.target.closest('.tab')) return;
+  const tr = e.target.closest('tr[data-id]');
+  if (tr) openEdit(+tr.dataset.id);
+});
+
+document.addEventListener('dblclick', e => {
+  const tr = e.target.closest('tr[data-g]');
+  if (!tr || !e.target.closest('td:first-child')) return;
+  const id = +tr.dataset.g, r = DATA[id];
+  const n = prompt('名称を変更（空欄で削除：配下にタスクがない場合のみ）', r.name);
+  if (n === null) return;
+  if (n.trim() === '') {
+    const nxt = DATA[id + 1];
+    if (r.lv === '中' && (!nxt || nxt.lv === '中' || nxt.lv === '大')) {
+      DATA.splice(id, 1);
+    } else {
+      alert('配下にタスクがあるため削除できません');
+      return;
+    }
+  } else {
+    r.name = n.trim();
+  }
+  saveToServer();
+});
+
+$('rst').onclick = async () => {
+  if (confirm('すべての変更を破棄して初期データに戻します。よろしいですか？')) {
+    const res = await fetch('/api/tasks/reset', { method: 'POST' });
+    const json = await res.json();
+    DATA = json.tasks;
+    build();
+    refreshWho();
+    render();
+  }
+};
+
+document.addEventListener('click', e => {
+  const tg = e.target.closest('.tg');
+  if (tg) {
+    const k = tg.dataset.k;
+    state.collapsed.has(k) ? state.collapsed.delete(k) : state.collapsed.add(k);
+    render();
+    return;
+  }
+  const kp = e.target.closest('.kpi[data-s]');
+  if (kp) {
+    const s = kp.dataset.s;
+    state.off.has(s) ? state.off.delete(s) : state.off.add(s);
+    render();
+    return;
+  }
+  const tab = e.target.closest('.tab');
+  if (tab) {
+    document.querySelectorAll('.tab, .panel').forEach(x => x.classList.remove('on'));
+    tab.classList.add('on');
+    document.getElementById(tab.dataset.p).classList.add('on');
+  }
+});
+
+$('exp').onclick = () => { state.collapsed.clear(); render(); };
+$('col').onclick = () => {
+  state.collapsed.clear();
+  for (const b of tree) for (const m of b.kids) state.collapsed.add(b.name + '/' + m.name);
+  render();
+};
+['base', 'soon', 'who', 'q'].forEach(id => $(id).addEventListener('input', render));
+
+// 初回ロード & 15秒ごとの自動ポーリング同期
+loadFromServer();
+setInterval(loadFromServer, 15000);
+</script>
+</body>
+</html>
