@@ -163,9 +163,12 @@ function build() {
       big.kids.push(mid);
     } else if (r.lv === '小' && mid) {
       const it = { ...r, lv: 3, id, s: pd(r.s), e: pd(r.e), big: big.name, mid: mid.name };
-      if (it.st === '終了') done.push(it);
-      else if (!it.s && !it.e) undated.push(it);
-      else mid.kids.push(it);
+      if (it.st === '終了') {
+        done.push(it);
+      } else {
+        if (!it.s && !it.e) undated.push(it);
+        mid.kids.push(it);
+      }
     }
   });
 }
@@ -223,8 +226,12 @@ function weekLines() {
 }
 let WK = weekLines();
 
-function barHtml(s, e, open, color, cls) {
-  if (!s) return '';
+function barHtml(s, e, open, color, cls, stat) {
+  if (stat === '日付未設定' && !s && !e) return '';
+  if (!s && !e && stat === '継続中') {
+    return '<div class="bar cont" style="left:0;right:0;width:100%;background-color:var(--cont);opacity:0.75;" title="通年・継続業務"></div>';
+  }
+  if (!s) s = CH_START;
   if (!e) e = s;
   const endD = open ? CH_END : new Date(e.getTime() + DAY);
   const l = Math.max(0, xpos(s)), r = Math.min(W, xpos(endD));
@@ -262,7 +269,7 @@ function render() {
       if (!col) {
         for (const it of items) {
           const rem = it.e ? Math.round((it.e - base) / DAY) : '';
-          bigHtml += '<tr class="l3" data-id="' + it.id + '"><td class="sticky name" style="left:0;padding-left:34px" title="' + esc(it.name) + '">' + esc(it.name) + '</td><td class="who who-' + esc(it.who) + '">' + esc(it.who) + '</td><td>' + esc(it.kind || it.cat || '') + '</td><td><span class="badge st-' + it.stat + '">' + it.stat + '</span></td><td>' + fmt(it.s) + '</td><td>' + fmt(it.e) + '</td><td>' + rem + '</td>' + cellChart(barHtml(it.s, it.e, it.stat === '継続中' && !it.e, COL[it.stat], it.stat === '継続中' ? 'cont' : '')) + '</tr>';
+          bigHtml += '<tr class="l3" data-id="' + it.id + '" id="task-row-' + it.id + '"><td class="sticky name" style="left:0;padding-left:34px" title="' + esc(it.name) + '">' + esc(it.name) + '</td><td class="who who-' + esc(it.who) + '">' + esc(it.who) + '</td><td>' + esc(it.kind || it.cat || '') + '</td><td><span class="badge st-' + it.stat + '">' + it.stat + '</span></td><td>' + fmt(it.s) + '</td><td>' + fmt(it.e) + '</td><td>' + rem + '</td>' + cellChart(barHtml(it.s, it.e, it.stat === '継続中' && !it.e, COL[it.stat], it.stat === '継続中' ? 'cont' : '', it.stat)) + '</tr>';
         }
       }
     }
@@ -278,9 +285,9 @@ function render() {
 }
 
 function renderOthers(base, soon, counts) {
-  const tbl = (head, rows, ids) => '<table class="s"><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr>' + rows.map((r, k) => '<tr' + (ids ? ' data-id="' + ids[k] + '" style="cursor:pointer"' : '') + '>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</table>';
-  document.getElementById('p2').innerHTML = '<p>期限のない継続業務・日付未入力のタスクです。行をクリックで編集できます。</p>' + tbl(['担当', '項目', '分類', '種別', 'ステータス', '備考'], undated.map(i => [i.who, i.name, i.cat, i.kind, i.st, i.st === '終了予定' ? '期限を入力してください' : '']), undated.map(i => i.id));
-  document.getElementById('p3').innerHTML = tbl(['担当', '項目', '分類', '種別', '開始', '終了'], done.map(i => [i.who, i.name, i.cat, i.kind, fmt(i.s), fmt(i.e)]), done.map(i => i.id));
+  const tbl = (head, rows, ids) => '<table class="s"><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr>' + rows.map((r, k) => '<tr' + (ids ? ' data-id="' + ids[k] + '" style="cursor:pointer"' : '') + '>' + r.map((c, ci) => ci === 0 ? '<td><a href="javascript:void(0)" class="link-gantt" data-id="' + ids[k] + '" style="color:var(--navy);font-weight:bold;text-decoration:underline;">' + esc(c) + '</a></td>' : '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</table>';
+  document.getElementById('p2').innerHTML = '<p style="color:#556;margin-bottom:8px;">期限のない継続業務・日付未入力のタスク一覧です。<br><b>「項目名」をクリックすると、ガントチャートタブ内の該当タスク行へ自動スクロールしてハイライト表示</b>します。行クリックで日付などの編集・期限設定が可能です。</p>' + tbl(['項目（クリックでガントへジャンプ）', '担当', '分類', '種別', 'ステータス', '状態'], undated.map(i => [i.name, i.who, i.cat, i.kind, i.st, i.st === '終了予定' ? '⚠ 期限未設定' : '継続中']), undated.map(i => i.id));
+  document.getElementById('p3').innerHTML = '<p style="color:#556;margin-bottom:8px;">完了済みタスク一覧です。クリックで詳細確認や再開（ステータス変更）が可能です。</p>' + tbl(['項目', '担当', '分類', '種別', '開始', '終了'], done.map(i => [i.name, i.who, i.cat, i.kind, fmt(i.s), fmt(i.e)]), done.map(i => i.id));
 
   const late = [], soonL = [];
   for (const b of tree) for (const m of b.kids) for (const it of m.kids) {
@@ -498,6 +505,34 @@ $('rst').onclick = async () => {
 };
 
 document.addEventListener('click', e => {
+  const lnk = e.target.closest('.link-gantt');
+  if (lnk) {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = lnk.dataset.id;
+    // ガントチャートタブに切り替え
+    document.querySelectorAll('.tab, .panel').forEach(x => x.classList.remove('on'));
+    document.querySelector('.tab[data-p="p1"]').classList.add('on');
+    document.getElementById('p1').classList.add('on');
+    // 全展開して表示
+    state.collapsed.clear();
+    state.off.clear();
+    $('who').value = '';
+    $('q').value = '';
+    render();
+    setTimeout(() => {
+      const el = document.getElementById('task-row-' + id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background 0.5s';
+        const orig = el.style.background;
+        el.style.background = '#fff3cd';
+        setTimeout(() => el.style.background = orig, 2500);
+      }
+    }, 100);
+    return;
+  }
+
   const tg = e.target.closest('.tg');
   if (tg) {
     const k = tg.dataset.k;
