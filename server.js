@@ -8,10 +8,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'tasks.json');
 const INITIAL_DATA_FILE = path.join(__dirname, 'initial_tasks.json');
 
-// GitHub Gist 設定 (環境変数で設定)
-// GIST_ID: 保存先の Gist ID
-// GITHUB_TOKEN: Gist 更新権限を持つ GitHub Personal Access Token (classic: gist スコープ または Fine-grained token)
-// GIST_FILENAME: Gist 内のファイル名 (省略時は tasks.json)
+// GitHub Gist 設定 (環境変数)
 const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GIST_FILENAME = process.env.GIST_FILENAME || 'tasks.json';
@@ -22,7 +19,6 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Gist API 通信 (Node.js 標準の https を使用)
 const https = require('https');
 
 function githubApiRequest(method, endpoint, body = null) {
@@ -62,13 +58,11 @@ function githubApiRequest(method, endpoint, body = null) {
   });
 }
 
-// Gist からタスクを取得
 async function fetchTasksFromGist() {
   const gist = await githubApiRequest('GET', `/gists/${GIST_ID}`);
   const file = gist.files && (gist.files[GIST_FILENAME] || Object.values(gist.files)[0]);
   if (!file) throw new Error(`File ${GIST_FILENAME} not found in Gist`);
   
-  // Gistファイルが truncated (巨大) な場合は raw_url から取得
   if (file.truncated && file.raw_url) {
     return new Promise((resolve, reject) => {
       https.get(file.raw_url, { headers: { 'User-Agent': 'qpi-gantt-app' } }, (res) => {
@@ -83,7 +77,6 @@ async function fetchTasksFromGist() {
   return JSON.parse(file.content);
 }
 
-// Gist へタスクを保存
 async function saveTasksToGist(tasks) {
   const body = {
     description: `QPI Gantt Chart Tasks (Updated: ${new Date().toISOString()})`,
@@ -96,7 +89,6 @@ async function saveTasksToGist(tasks) {
   await githubApiRequest('PATCH', `/gists/${GIST_ID}`, body);
 }
 
-// ローカルファイル操作 (フォールバック & キャッシュ)
 function initLocalData() {
   const dir = path.dirname(DATA_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -130,20 +122,17 @@ app.get('/api/tasks', async (req, res) => {
   if (isGistConfigured) {
     try {
       const tasks = await fetchTasksFromGist();
-      writeLocalTasks(tasks); // キャッシュ更新
+      writeLocalTasks(tasks);
       return res.json({ tasks, storage: 'gist', lastUpdated: new Date() });
     } catch (err) {
-      console.error('Failed to fetch from Gist, falling back to local/initial:', err);
-      // Gist 取得失敗時はローカルキャッシュを返す
+      console.error('Failed to fetch from Gist, falling back to local:', err);
       return res.json({ tasks: readLocalTasks(), storage: 'fallback-local', error: err.message });
     }
   }
-
-  // Gist 未設定時は従来通りローカルファイル
   res.json({ tasks: readLocalTasks(), storage: 'local', lastUpdated: fs.statSync(DATA_FILE).mtime });
 });
 
-// API: 全タスク更新（一括同期）
+// API: 全タスク更新
 app.put('/api/tasks', async (req, res) => {
   const tasks = req.body.tasks;
   if (!Array.isArray(tasks)) {
@@ -165,7 +154,7 @@ app.put('/api/tasks', async (req, res) => {
   res.json({ success: true, count: tasks.length, storage: 'local' });
 });
 
-// API: 初期データにリセット
+// API: リセット
 app.post('/api/tasks/reset', async (req, res) => {
   let initial = [];
   if (fs.existsSync(INITIAL_DATA_FILE)) {
@@ -188,7 +177,6 @@ app.post('/api/tasks/reset', async (req, res) => {
   res.json({ success: true, tasks: initial });
 });
 
-// 起動時のローカルデータ準備
 initLocalData();
 
 app.listen(PORT, () => {
